@@ -5,3 +5,5 @@ cerebras-cloud-sdk
 groq
 elevenlabs
 websockets
+pipecat-ai[cerebras,groq,elevenlabs,silero,local]
+pyaudio
