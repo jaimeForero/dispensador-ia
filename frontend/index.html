@@ -5,27 +5,36 @@
     <title>Dispensador IA</title>
     <link rel="stylesheet" href="/static/style.css">
 
-    <!-- Importmap: dice al navegador dónde encontrar Three.js -->
     <script type="importmap">
     {
         "imports": {
             "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+            "talkinghead": "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.4/modules/talkinghead.mjs"
         }
     }
     </script>
 </head>
 <body>
-    <!-- Canvas donde se renderiza el avatar 3D -->
+    <!-- Canvas del avatar 3D -->
     <div id="avatar-container"></div>
 
-    <!-- Overlay con info -->
+    <!-- Overlay con info y controles -->
     <div id="info">
         <h1>🥤 Dispensador IA</h1>
-        <p id="status">Cargando avatar...</p>
+        <p id="status">Inicializando...</p>
     </div>
 
-    <!-- Importante: type="module" para usar imports -->
+    <!-- Controles para hablar -->
+    <div id="controls">
+        <textarea
+            id="text-input"
+            placeholder="Escribe lo que el avatar debe decir..."
+            rows="2"
+        >¡Hola! Bienvenido al dispensador. ¿Qué refresco te apetece hoy?</textarea>
+        <button id="speak-button" disabled>🎤 Hacer hablar</button>
+    </div>
+
     <script type="module" src="/static/app.js"></script>
 </body>
 </html>
