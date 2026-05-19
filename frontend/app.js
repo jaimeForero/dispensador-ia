@@ -1,9 +1,15 @@
 import { TalkingHead } from 'talkinghead';
 
+console.log('🚀 APP.JS V3.4 INICIADO');
+console.log('✅ TalkingHead importado:', typeof TalkingHead);
+
 // ─────────────────────────────────────────────────────────────────
 // Configuración
 // ─────────────────────────────────────────────────────────────────
 const AVATAR_URL = '/static/assets/brunette.glb';
+const WS_URL = `ws://${window.location.host}/ws`;
+
+console.log('🔧 Configuración:', { AVATAR_URL, WS_URL });
 
 const container = document.getElementById('avatar-container');
 const statusEl = document.getElementById('status');
@@ -14,25 +20,102 @@ const speakButton = document.getElementById('speak-button');
 // ─────────────────────────────────────────────────────────────────
 // Crear instancia de TalkingHead
 // ─────────────────────────────────────────────────────────────────
+console.log('🎬 Creando TalkingHead...');
+
 const head = new TalkingHead(container, {
-    ttsEndpoint: 'https://example.com/tts',  // dummy, requerido pero no se usa
+    ttsEndpoint: 'https://example.com/tts',  // dummy
     cameraView: 'upper',
-    lipsyncModules: ['en'],   // solo inglés (es no existe en TalkingHead)
+    lipsyncModules: ['en'],
 });
+
+console.log('✅ TalkingHead creado');
+
+
+// ─────────────────────────────────────────────────────────────────
+// Estado de la conexión WebSocket
+// ─────────────────────────────────────────────────────────────────
+let ws = null;
+let wsReady = false;
+let avatarReady = false;
+
+
+// ─────────────────────────────────────────────────────────────────
+// Conectar al WebSocket
+// ─────────────────────────────────────────────────────────────────
+function conectarWebSocket() {
+    console.log(`🔌 Conectando a ${WS_URL}...`);
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+        console.log('✅ WebSocket conectado');
+        wsReady = true;
+        actualizarBotonHablar();
+    };
+
+    ws.onmessage = async (event) => {
+        const data = JSON.parse(event.data);
+        console.log(`📨 Mensaje recibido: ${data.type}`);
+
+        switch (data.type) {
+            case 'ready':
+                console.log('Backend listo:', data.message);
+                break;
+
+            case 'speaking_start':
+                statusEl.textContent = '🎤 Generando audio...';
+                statusEl.classList.remove('error', 'ok');
+                break;
+
+            case 'audio':
+                await reproducirAudioConLipsync(data.audio_base64, data.text);
+                break;
+
+            case 'speaking_end':
+                statusEl.textContent = '✅ Listo. Escribe otra cosa.';
+                statusEl.classList.add('ok');
+                speakButton.disabled = false;
+                speakButton.textContent = '🎤 Hacer hablar';
+                break;
+
+            case 'error':
+                statusEl.textContent = `❌ Error: ${data.message}`;
+                statusEl.classList.add('error');
+                speakButton.disabled = false;
+                speakButton.textContent = '🎤 Hacer hablar';
+                break;
+        }
+    };
+
+    ws.onerror = (error) => {
+        console.error('❌ Error en WebSocket:', error);
+        statusEl.textContent = '❌ Error de conexión';
+        statusEl.classList.add('error');
+        wsReady = false;
+    };
+
+    ws.onclose = () => {
+        console.warn('🔌 WebSocket cerrado. Reintentando en 2s...');
+        wsReady = false;
+        actualizarBotonHablar();
+        setTimeout(conectarWebSocket, 2000);
+    };
+}
 
 
 // ─────────────────────────────────────────────────────────────────
 // Cargar el avatar
 // ─────────────────────────────────────────────────────────────────
 async function cargarAvatar() {
+    console.log('📥 Iniciando carga del avatar...');
     statusEl.textContent = 'Cargando avatar...';
+
     try {
         await head.showAvatar(
             {
                 url: AVATAR_URL,
                 body: 'M',
                 avatarMood: 'neutral',
-                lipsyncLang: 'en',   // motor de lipsync inglés (vale para español)
+                lipsyncLang: 'en',
             },
             (event) => {
                 if (event.lengthComputable) {
@@ -42,60 +125,75 @@ async function cargarAvatar() {
             }
         );
 
+        avatarReady = true;
         statusEl.textContent = '✅ Avatar listo. Escribe y pulsa "Hacer hablar".';
         statusEl.classList.add('ok');
-        speakButton.disabled = false;
-        console.log('✅ TalkingHead inicializado y avatar cargado');
+        actualizarBotonHablar();
+        console.log('✅ Avatar cargado correctamente');
     } catch (err) {
-        console.error(err);
-        statusEl.textContent = `❌ Error: ${err.message}`;
+        console.error('❌ Error cargando avatar:', err);
+        statusEl.textContent = `❌ Error cargando avatar: ${err.message}`;
         statusEl.classList.add('error');
     }
 }
 
 
 // ─────────────────────────────────────────────────────────────────
-// Hacer que el avatar hable
+// Habilitar el botón solo cuando avatar Y WebSocket estén listos
 // ─────────────────────────────────────────────────────────────────
-async function hacerHablar(texto) {
+function actualizarBotonHablar() {
+    if (avatarReady && wsReady) {
+        speakButton.disabled = false;
+    } else {
+        speakButton.disabled = true;
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+// Pedir al backend que genere audio (vía WebSocket)
+// ─────────────────────────────────────────────────────────────────
+function pedirHablar(texto) {
     if (!texto.trim()) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        statusEl.textContent = '❌ No hay conexión con el servidor';
+        statusEl.classList.add('error');
+        return;
+    }
 
     speakButton.disabled = true;
     speakButton.textContent = '⏳ Generando...';
-    statusEl.textContent = 'Pidiendo audio al backend...';
-    statusEl.classList.remove('error');
+
+    ws.send(JSON.stringify({
+        type: 'speak',
+        text: texto,
+    }));
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+// Reproducir audio recibido (con lipsync)
+// ─────────────────────────────────────────────────────────────────
+async function reproducirAudioConLipsync(audioBase64, texto) {
+    statusEl.textContent = '🎤 Avatar hablando...';
+    speakButton.textContent = '🗣️ Hablando...';
 
     try {
-        // 1) Pedir audio al backend
-        const resp = await fetch('/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: texto }),
-        });
-
-        if (!resp.ok) {
-            throw new Error(`Backend devolvió ${resp.status}`);
+        const binaryString = atob(audioBase64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
         }
 
-        // 2) Recibir el audio como blob → arraybuffer
-        const audioBlob = await resp.blob();
-        const audioArrayBuffer = await audioBlob.arrayBuffer();
-
-        statusEl.textContent = '🎤 Avatar hablando...';
-        speakButton.textContent = '🗣️ Hablando...';
-
-        // 3) Decodificar audio
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const audioBuffer = await audioContext.decodeAudioData(audioArrayBuffer);
+        const audioBuffer = await audioContext.decodeAudioData(bytes.buffer);
 
-        // 4) Distribuir tiempos de palabras a lo largo del audio
         const palabras = texto.split(/\s+/).filter(w => w.length > 0);
         const duracionMs = audioBuffer.duration * 1000;
         const msPorPalabra = duracionMs / palabras.length;
         const wtimes = palabras.map((_, i) => i * msPorPalabra);
         const wdurations = palabras.map(() => msPorPalabra);
 
-        // 5) Hacer hablar al avatar con audio + sincronización de palabras
         await head.speakAudio(
             {
                 audio: audioBuffer,
@@ -107,31 +205,25 @@ async function hacerHablar(texto) {
                 lipsyncLang: 'en',
             }
         );
-
-        statusEl.textContent = '✅ Listo. Escribe otra cosa.';
-        statusEl.classList.add('ok');
     } catch (err) {
-        console.error(err);
-        statusEl.textContent = `❌ Error: ${err.message}`;
+        console.error('Error reproduciendo audio:', err);
+        statusEl.textContent = `❌ Error reproduciendo: ${err.message}`;
         statusEl.classList.add('error');
-    } finally {
-        speakButton.disabled = false;
-        speakButton.textContent = '🎤 Hacer hablar';
     }
 }
 
 
 // ─────────────────────────────────────────────────────────────────
-// Eventos
+// Eventos UI
 // ─────────────────────────────────────────────────────────────────
 speakButton.addEventListener('click', () => {
-    hacerHablar(textInput.value);
+    pedirHablar(textInput.value);
 });
 
 textInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        hacerHablar(textInput.value);
+        pedirHablar(textInput.value);
     }
 });
 
@@ -139,4 +231,7 @@ textInput.addEventListener('keydown', (e) => {
 // ─────────────────────────────────────────────────────────────────
 // Arrancar
 // ─────────────────────────────────────────────────────────────────
+console.log('🚀 Iniciando aplicación...');
+conectarWebSocket();
 cargarAvatar();
+console.log('✅ Aplicación inicializada');
