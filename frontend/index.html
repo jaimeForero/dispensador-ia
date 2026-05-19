@@ -4,13 +4,28 @@
     <meta charset="UTF-8">
     <title>Dispensador IA</title>
     <link rel="stylesheet" href="/static/style.css">
+
+    <!-- Importmap: dice al navegador dónde encontrar Three.js -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
 </head>
 <body>
-    <div class="container">
+    <!-- Canvas donde se renderiza el avatar 3D -->
+    <div id="avatar-container"></div>
+
+    <!-- Overlay con info -->
+    <div id="info">
         <h1>🥤 Dispensador IA</h1>
-        <p id="status">Cargando...</p>
-        <p id="avatar-check">Comprobando avatar...</p>
+        <p id="status">Cargando avatar...</p>
     </div>
-    <script src="/static/app.js"></script>
+
+    <!-- Importante: type="module" para usar imports -->
+    <script type="module" src="/static/app.js"></script>
 </body>
 </html>
